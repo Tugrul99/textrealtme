@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import config from "../config"; // config.js'i içe aktar
-
-const SERVER_URL = config.SERVER_URL; // Artık Render URL’sini alıyor
+import { SERVER_URL } from "../config"; // Environment variable'dan alınacak
 
 const TextEditor = () => {
   const [socket, setSocket] = useState(null);
@@ -10,16 +8,27 @@ const TextEditor = () => {
   const [username, setUsername] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [message, setMessage] = useState("");
-  const [documentLoaded, setDocumentLoaded] = useState(false);
+
+  // Renk üretme fonksiyonu
+  const getColorForUser = (username) => {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD'];
+    const index = username.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
 
   useEffect(() => {
-    // WebSocket bağlantısını güvenli şekilde kur
+    // WebSocket bağlantısı
     const s = io(SERVER_URL, {
       withCredentials: true,
-      transports: ["websocket"],
+      transports: ['websocket']
+    });
+
+    s.on("update-document", (content) => {
+      setContent(content);
     });
 
     setSocket(s);
+
     return () => s.disconnect();
   }, []);
 
@@ -29,35 +38,14 @@ const TextEditor = () => {
     const newMessage = `[${username}]: ${message.trim()}`;
     const updatedContent = content ? `${content}\n${newMessage}` : newMessage;
 
-    setContent(updatedContent);
-    setMessage("");
-
-    // Veritabanına kaydetmek için API çağrısı yapıyoruz
-    fetch(`${SERVER_URL}/save-document`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        documentId: "default-document",
-        content: updatedContent,
-        username: username,
-      }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log("Document saved successfully:", data);
-      })
-      .catch((error) => {
-        console.error("Error saving document:", error);
-      });
-
-    // Soket üzerinden diğer kullanıcılara güncellemeyi gönderiyoruz
+    // Soket üzerinden gönder
     socket.emit("edit-document", {
       documentId: "default-document",
       content: updatedContent,
-      username,
+      username
     });
+
+    setMessage("");
   };
 
   return (
@@ -66,13 +54,17 @@ const TextEditor = () => {
         <div className="username-container">
           <input
             type="text"
-            className="username-input"
-            placeholder="Enter your name..."
+            placeholder="Kullanıcı adınız..."
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            className="username-input"
           />
-          <button className="start-button" onClick={() => setIsEditing(true)}>
-            Start
+          <button 
+            className="start-button"
+            onClick={() => setIsEditing(true)}
+            disabled={!username.trim()}
+          >
+            Başla
           </button>
         </div>
       ) : (
@@ -80,13 +72,18 @@ const TextEditor = () => {
           <div className="message-input-container">
             <input
               type="text"
-              className="message-input"
-              placeholder="Type your message..."
+              placeholder="Mesajınız..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              className="message-input"
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
             />
-            <button className="send-button" onClick={sendMessage}>
-              Send
+            <button 
+              className="send-button"
+              onClick={sendMessage}
+              disabled={!message.trim()}
+            >
+              Gönder
             </button>
           </div>
 
@@ -94,11 +91,10 @@ const TextEditor = () => {
             {content.split("\n").map((line, index) => {
               const match = line.match(/^\[(.*?)\]: (.*)$/);
               if (match) {
-                const username = match[1];
-                const message = match[2];
+                const [_, user, msg] = match;
                 return (
-                  <p key={index} style={{ color: getColorForUser(username) }}>
-                    <strong>{username}:</strong> {message}
+                  <p key={index} style={{ color: getColorForUser(user) }}>
+                    <strong>{user}:</strong> {msg}
                   </p>
                 );
               }
