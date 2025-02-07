@@ -1,18 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import config from "../config";  // config.js'i içe aktar
-import '../components/styles.css';
+import config from "../config"; // config.js'i içe aktar
 
-const SERVER_URL = config.SERVER_URL;  // Artık Render URL’sini alıyor
-
-const getColorForUser = (username) => {
-    const colors = ["#FF5733", "#33FF57", "#3357FF", "#FF33A8", "#FFBD33"];
-    let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-        hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
+const SERVER_URL = config.SERVER_URL; // Artık Render URL’sini alıyor
 
 const TextEditor = () => {
   const [socket, setSocket] = useState(null);
@@ -20,14 +10,17 @@ const TextEditor = () => {
   const [username, setUsername] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [message, setMessage] = useState("");
+  const [documentLoaded, setDocumentLoaded] = useState(false);
 
   useEffect(() => {
-    const s = io(SERVER_URL);
-    setSocket(s);
+    // WebSocket bağlantısını güvenli şekilde kur
+    const s = io(SERVER_URL, {
+      withCredentials: true,
+      transports: ["websocket"],
+    });
 
-    return () => {
-      s.disconnect();
-    };
+    setSocket(s);
+    return () => s.disconnect();
   }, []);
 
   const sendMessage = () => {
@@ -41,29 +34,29 @@ const TextEditor = () => {
 
     // Veritabanına kaydetmek için API çağrısı yapıyoruz
     fetch(`${SERVER_URL}/save-document`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            documentId: "default-document",
-            content: updatedContent,
-            username: username,
-        }),
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        documentId: "default-document",
+        content: updatedContent,
+        username: username,
+      }),
     })
-    .then(response => response.json())
-    .then(data => {
+      .then((response) => response.json())
+      .then((data) => {
         console.log("Document saved successfully:", data);
-    })
-    .catch(error => {
+      })
+      .catch((error) => {
         console.error("Error saving document:", error);
-    });
+      });
 
     // Soket üzerinden diğer kullanıcılara güncellemeyi gönderiyoruz
     socket.emit("edit-document", {
-        documentId: "default-document",
-        content: updatedContent,
-        username,
+      documentId: "default-document",
+      content: updatedContent,
+      username,
     });
   };
 
